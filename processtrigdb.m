@@ -54,6 +54,9 @@ LP.forder = 5;
 % windowing to eliminate transients at onset, offset
 ramp_ms = 0.5;
 
+% measurement window (ms)
+measure_window = [5 95];
+
 %% read in frequency, attenuation, desired level and scaling from file
 % columns are:
 % trial,freq,mV,atten,dB_SPL
@@ -120,6 +123,7 @@ for n = 1:LCY.nsweeps
 end
 
 %% read in raw DW data
+DWrawfile = 'DW_RawfromDataWave_FullList_20191003_1.bin'
 DWr = readBinData(fullfile(datapath, DWrawfile));
 
 %% process raw, unattenuated data
@@ -168,6 +172,8 @@ end
 % tolerance (in Hz) for finding peak frequency in autodetect mode
 FreqDetectWidth = 21;
 calfreq = 0;
+measure_bins = ms2bin(measure_window(1), DWr.cal.Fs)	...
+							: ms2bin(measure_window(2), DWr.cal.Fs);
 for n = 1:DWr.nsweeps
 	% get spectrum of data
 	[tmpfreqs, tmpmags, fmax, magmax] = daqdbfft(DWr.data{n}', DWr.cal.Fs, ...
