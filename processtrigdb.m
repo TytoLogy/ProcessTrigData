@@ -41,7 +41,8 @@ infofile = 'calibrate_full_list_atten_30Higher.csv';
 datapath = '/Users/sshanbhag/Work/Data/Audio/Calibration/Inga/30Sep2019';
 % data files
 LCYfile = 'LCY_Calibration_FullList_20190930_1.bin';
-DWrawfile = 'DW_Raw_FullList_20190930_1.bin';
+% DWrawfile = 'DW_Raw_FullList_20190930_1.bin';
+DWrawfile = 'DW_Raw_FullList_20191003_1.bin';
 DWattfile = 'DW_Atten_FullList_20190930_1.bin';
 % filtering high pass cutoff (Hz);
 HP.Fc = 3500;
@@ -168,27 +169,45 @@ for n = 1:DWr.nsweeps
 	DWr.data{n} = tmp;
 end
 
-%% auto detect tones from raw unattenuated data
-% tolerance (in Hz) for finding peak frequency in autodetect mode
-FreqDetectWidth = 21;
-calfreq = 0;
-measure_bins = ms2bin(measure_window(1), DWr.cal.Fs)	...
+
+%% find magnitudes
+% check vs. csv data
+if(DWr.nsweeps == length(listdata))
+	measure_bins = ms2bin(measure_window(1), DWr.cal.Fs)	...
 							: ms2bin(measure_window(2), DWr.cal.Fs);
-for n = 1:DWr.nsweeps
-	% get spectrum of data
-	[tmpfreqs, tmpmags, fmax, magmax] = daqdbfft(DWr.data{n}', DWr.cal.Fs, ...
-																	length(DWr.data{n}));
-	
-	freq(n) = fmax;
-	% compute pll magnitude and phase at this frequency
-	[mag(n), phi(n)] = fitsinvec(DWr.data{n}(1:ms2bin(100, DWr.cal.Fs)), ...
-										1, DWr.cal.Fs, freq(n));
+	for n = 1:DWr.nsweeps
+		% compute pll magnitude and phase at this frequency
+		[mag(n), phi(n)] = fitsinvec(DWr.data{n}(measure_bins), ...
+										1, DWr.cal.Fs, Freq(n));
+	end
 
+	[~, fbase] = fileparts(DWrawfile);
+	csvwrite([fbase '_vals.csv'], [Freq, mag']);	
+else
+	% check vs. csv data
+	fprintf('DWr data %s has %d sweeps\n', DWrawfile, DWr.nsweeps);
+	fprintf('CSV file has %d stimuli\n', length(listdata));
+	% auto detect tones from raw unattenuated data
+	% tolerance (in Hz) for finding peak frequency in autodetect mode
+	FreqDetectWidth = 21;
+	calfreq = 0;
+	measure_bins = ms2bin(measure_window(1), DWr.cal.Fs)	...
+								: ms2bin(measure_window(2), DWr.cal.Fs);
+	for n = 1:DWr.nsweeps
+		% get spectrum of data
+		[tmpfreqs, tmpmags, fmax, magmax] = daqdbfft(DWr.data{n}', DWr.cal.Fs, ...
+																		length(DWr.data{n}));
+
+		freq(n) = fmax;
+		% compute pll magnitude and phase at this frequency
+		[mag(n), phi(n)] = fitsinvec(DWr.data{n}(measure_bins), ...
+											1, DWr.cal.Fs, freq(n));
+
+	end
+
+	[~, fbase] = fileparts(DWrawfile);
+	csvwrite([fbase '_vals.csv'], [freq', mag']);
 end
-
-
-csvwrite('DWraw_vals.csv', [freq', mag']);
-
 %%
 figure
 
