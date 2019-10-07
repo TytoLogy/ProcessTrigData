@@ -1,5 +1,10 @@
 %------------------------------------------------------------------------
-% script to process triggered capture data
+%------------------------------------------------------------------------
+% processtrigdb
+%------------------------------------------------------------------------
+%------------------------------------------------------------------------
+%------------------------------------------------------------------------
+% script to process triggered capture data from NICal for Inga's data
 %------------------------------------------------------------------------
 %
 %------------------------------------------------------------------------
@@ -60,7 +65,7 @@ DWrawfile = 'DW_RawfromDataWave_FullList_20191003_2.bin';
 %---------------------------------------------------------
 % attenuated
 %---------------------------------------------------------
-DWattfile = 'DW_Atten_FullList_20190930_1.bin';
+DWattfile = 'DW_WithAtten_fromDataWave_FullList_20191003_1.bin';
 
 %---------------------------------------------------------
 % Settings for processing data
@@ -161,79 +166,215 @@ if DWa.nsweeps ~= length(listdata)
 	warning('Mismatch between # of triggered data and # in csv file')
 end
 
-
-
 %------------------------------------------------------------------------
 %------------------------------------------------------------------------
 %% computations
 %------------------------------------------------------------------------
 %------------------------------------------------------------------------
 
+%------------------------------------------------------------------------
+%------------------------------------------------------------------------
+%% MIC data: find magnitudes
+%------------------------------------------------------------------------
+%------------------------------------------------------------------------
+[MIC.mag, MIC.phi, MIC.freq] = findMags(MIC, Freq, measure_window);
 
+% determine unique frequency values
+freq = unique(MIC.freq);
+nfreq = length(freq);
+att = unique(Atten);
+natt = length(att); %#ok<*NASGU>
+lev = unique(Level);
+nlev = length(lev);
 
+fprintf('%s\n', MIC.file);
+fprintf('Frequencies (Hz) tested:\n');
+fprintf('\t%d\n', freq);
+fprintf('\n');
+fprintf('Levels (dB SPL) tested:\n');
+fprintf('\t%d\n', lev);
+fprintf('\n');
+fprintf('Attenuations (dB) tested:\n');
+fprintf('\t%d\n', att);
+fprintf('\n');
+
+%% compute dB SPL: 
+%	(1) convert MIC.mag (peak sinusoid value, in Volts) to RMS volts by
+%		 multiplying by sqrt(2)/2 (RMS value of 1 cycle of a sinusoid)
+%	(2) convert to Pa using scaling factor (based on cal mic sensitivity)
+%	(3) use 20log10(x/2e-5 Pa) to convert to dB SPL
+MIC.db = dbspl(MIC.cal.VtoPa * (sqrt(2)/2) * MIC.mag);
+
+% write to csv file
+[~, fbase] = fileparts(MIC.file);
+csvwrite([fbase '_vals.csv'], [MIC.freq, MIC.mag, MIC.db]);
+
+%% Plot through levels
+figure
+lstr = cell(nlev, 1);
+for l = 1:nlev
+	% compute index into arrays
+	startx = (1 + (l - 1)*nfreq);
+	endx = (l*nfreq);
+	indx = startx:endx;
+	if l == 1
+		plot(0.001*Freq(startx:endx), MIC.db(startx:endx), '-.');
+	else
+		hold on
+		plot(0.001*Freq(startx:endx), MIC.db(startx:endx), '-.');
+		hold off
+	end
+	lstr{l} = sprintf('%d dB SPL', lev(l));
+end
+legend(lstr)
+xlabel('Frequency (kHz)')
+ylabel('dB SPL');
+grid on
+grid minor
+set(gcf, 'Name', MIC.file);
 
 %------------------------------------------------------------------------
 %------------------------------------------------------------------------
 %% DW raw data: find magnitudes
 %------------------------------------------------------------------------
 %------------------------------------------------------------------------
-
 [DWr.mag, DWr.phi, DWr.freq] = findMags(DWr, Freq, measure_window);
-
-
-%% check vs. csv data
-if(DWr.nsweeps == length(listdata))
-	% calculate range of bins (samples) for measurement (skip ramp on/off)
-	measure_bins = ms2bin(measure_window(1), DWr.cal.Fs)	...
-							: ms2bin(measure_window(2), DWr.cal.Fs);
-	% allocate mag, phi arrays
-	DWr.mag = zeros(DWr.nsweeps, 1);
-	DWr.phi = zeros(DWr.nsweeps, 1);
-	DWr.freq = Freq;
-	for n = 1:DWr.nsweeps
-		% compute pll magnitude and phase at this frequency
-		[DWr.mag(n), DWr.phi(n)] = fitsinvec(DWr.data{n}(measure_bins), ...
-										1, DWr.cal.Fs, Freq(n));
-	end
-
-	[~, fbase] = fileparts(DWrawfile);
-	csvwrite([fbase '_vals.csv'], [DWr.freq, DWr.mag]);	
-else
-	% check vs. csv data
-	fprintf('DWr data %s has %d sweeps\n', DWrawfile, DWr.nsweeps);
-	fprintf('CSV file has %d stimuli\n', length(listdata));
-	% auto detect tones from raw unattenuated data
-	% tolerance (in Hz) for finding peak frequency in autodetect mode
-	fprintf('automatically determining test frequency\n');
-	measure_bins = ms2bin(measure_window(1), DWr.cal.Fs)	...
-								: ms2bin(measure_window(2), DWr.cal.Fs);
-	% allocate mag, phi arrays
-	DWr.mag = zeros(DWr.nsweeps, 1);
-	DWr.phi = zeros(DWr.nsweeps, 1);
-	DWr.freq = zeros(DWr.nsweeps, 1);
-	for n = 1:DWr.nsweeps
-		% get spectrum of data
-		[tmpfreqs, tmpmags, fmax, magmax] = daqdbfft(DWr.data{n}', DWr.cal.Fs, ...
-																		length(DWr.data{n}));
-
-		DWr.freq(n) = fmax;
-		% compute pll magnitude and phase at this frequency
-		[DWr.mag(n), DWr.phi(n)] = fitsinvec(DWr.data{n}(measure_bins), ...
-											1, DWr.cal.Fs, DWr.freq(n));
-
-	end
-
 % write to csv file
-[~, fbase] = fileparts(DWrawfile);
+[~, fbase] = fileparts(DWr.file);
 csvwrite([fbase '_vals.csv'], [DWr.freq, DWr.mag]);
-%plot values
+
+% determine unique frequency values
+freq = unique(DWr.freq);
+nfreq = length(freq);
+att = unique(Atten);
+natt = length(att);
+lev = unique(Level);
+nlev = length(lev);
+
+fprintf('%s\n', DWr.file);
+fprintf('Frequencies (Hz) tested:\n');
+fprintf('\t%d\n', freq);
+fprintf('\n');
+fprintf('Levels (dB SPL) tested:\n');
+fprintf('\t%d\n', lev);
+fprintf('\n');
+fprintf('Attenuations (dB) tested:\n');
+fprintf('\t%d\n', att);
+fprintf('\n');
+
+%% write to csv file
+[~, fbase] = fileparts(DWr.file);
+csvwrite([fbase '_vals.csv'], [DWr.freq, DWr.mag]);
+
+%% Plot through levels
 figure
-plot(DWr.freq*0.001, DWr.mag, '.')
-xlabel('freqs (kHz)')
-ylabel('Mag (V)')
+lstr = cell(nlev, 1);
+for l = 1:nlev
+	% compute index into arrays
+	startx = (1 + (l - 1)*nfreq);
+	endx = (l*nfreq);
+	indx = startx:endx;
+	if l == 1
+		plot(0.001*Freq(startx:endx), DWr.mag(startx:endx), '-.');
+	else
+		hold on
+		plot(0.001*Freq(startx:endx), DWr.mag(startx:endx), '-.');
+		hold off
+	end
+	lstr{l} = sprintf('%d dB SPL', lev(l));
+end
+legend(lstr)
+xlabel('Frequency (kHz)')
+ylabel('Peak Volts');
 grid on
 grid minor
+set(gcf, 'Name', DWr.file);
 
+
+
+%------------------------------------------------------------------------
+%------------------------------------------------------------------------
+%% DW atten data: find magnitudes
+%------------------------------------------------------------------------
+%------------------------------------------------------------------------
+[DWa.mag, DWa.phi, DWa.freq] = findMags(DWa, Freq, measure_window);
+
+% compute rms dB re: 1V
+DWa.db = db( (sqrt(2)/2) * DWa.mag);
+
+% write to csv file
+[~, fbase] = fileparts(DWa.file);
+csvwrite([fbase '_vals.csv'], [DWa.freq, DWa.mag DWa.db]);
+
+% determine unique frequency values
+freq = unique(DWa.freq);
+nfreq = length(freq);
+att = unique(Atten);
+natt = length(att);
+lev = unique(Level);
+nlev = length(lev);
+
+fprintf('%s\n', DWa.file);
+fprintf('Frequencies (Hz) tested:\n');
+fprintf('\t%d\n', freq);
+fprintf('\n');
+fprintf('Levels (dB SPL) tested:\n');
+fprintf('\t%d\n', lev);
+fprintf('\n');
+fprintf('Attenuations (dB) tested:\n');
+fprintf('\t%d\n', att);
+fprintf('\n');
+
+%% write to csv file
+[~, fbase] = fileparts(DWa.file);
+csvwrite([fbase '_vals.csv'], [DWa.freq, DWa.mag]);
+
+%% Plot through levels
+figure
+lstr = cell(nlev, 1);
+for l = 1:nlev
+	% compute index into arrays
+	startx = (1 + (l - 1)*nfreq);
+	endx = (l*nfreq);
+	indx = startx:endx;
+	if l == 1
+		plot(0.001*Freq(startx:endx), DWa.mag(startx:endx), '-.');
+	else
+		hold on
+		plot(0.001*Freq(startx:endx), DWa.mag(startx:endx), '-.');
+		hold off
+	end
+	lstr{l} = sprintf('%d dB SPL', lev(l));
+end
+legend(lstr)
+xlabel('Frequency (kHz)')
+ylabel('Peak Volts');
+grid on
+grid minor
+set(gcf, 'Name', DWa.file);
+
+figure
+lstr = cell(nlev, 1);
+for l = 1:nlev
+	% compute index into arrays
+	startx = (1 + (l - 1)*nfreq);
+	endx = (l*nfreq);
+	indx = startx:endx;
+	if l == 1
+		plot(0.001*Freq(startx:endx), DWa.mag(startx:endx), '-.');
+	else
+		hold on
+		plot(0.001*Freq(startx:endx), DWa.mag(startx:endx), '-.');
+		hold off
+	end
+	lstr{l} = sprintf('%d Vrms', lev(l));
+end
+legend(lstr)
+xlabel('Frequency (kHz)')
+ylabel('Volts RMS');
+grid on
+grid minor
+set(gcf, 'Name', DWa.file);
 
 %{
 % ??????
