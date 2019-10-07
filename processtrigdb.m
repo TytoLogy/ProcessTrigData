@@ -108,54 +108,16 @@ MIC = readAndFilterTrigData(	'file', fullfile(datapath, MICfile), ...
 										'filterband', [HP.Fc LP.Fc], ...
 										'filterorder', HP.forder, ...
 										'showData', 'y');
+% check vs. csv data
+fprintf('MIC data %s has %d sweeps\n', MICfile, MIC.nsweeps);
+fprintf('CSV file has %d stimuli\n', length(listdata));
+if MIC.nsweeps ~= length(listdata)
+	warning('Mismatch between # of triggered data and # in csv file')
+end
 
 %---------------------------------------------------------
 %% process MIC data
 %---------------------------------------------------------
-
-% get # of sweeps
-MIC.nsweeps = length(MIC.data);
-% check vs. csv data
-fprintf('MIC data %s has %d sweeps\n', MICfile, MIC.nsweeps);
-fprintf('CSV file has %d stimuli\n', length(listdata));
-% SPL conversion
-VtoPa = 1 ./ ...
-		(MIC.cal.Gain(1) * invdb(MIC.cal.MicGain(1)) * MIC.cal.MicSensitivity);
-
-% first, filter the data
-
-fprintf('Filtering %s data\n', MICfile);
-% Nyquist frequency
-fnyq = MIC.cal.Fs/2;
-
-% build a highpass filter for processing the data
-[HP.fcoeffb, HP.fcoeffa] = butter(HP.forder, HP.Fc/fnyq, 'high');
-% build a lowpass filter for processing the data
-[LP.fcoeffb, LP.fcoeffa] = butter(LP.forder, LP.Fc/fnyq, 'low');
-
-% loop through sweeps, apply ramp and filter
-figure(1)
-dt = 1/MIC.cal.Fs;
-for n = 1:MIC.nsweeps
-	% plot raw data
-	subplot(2, 1, 1)
-	tvec = 1000 * dt * (0:(length(MIC.data{n}) - 1));
-	plot(tvec, MIC.data{n});
-	ylabel('Raw (V)');
-	title(sprintf('Sweep %d', n));
-	% filter data
-	% apply short ramp and highpass filter
-	tmp = filtfilt(HP.fcoeffb, HP.fcoeffa, ...
-					sin2array(MIC.data{n}', ramp_ms, MIC.cal.Fs));
-	% apply lowpass filter
-	tmp = filtfilt(LP.fcoeffb, LP.fcoeffa, tmp);
-	% plot filtered data
-	subplot(212)
-	plot(tvec, tmp);
-	xlabel('Time (ms)');
-	ylabel('Filtered (V)');
-	drawnow
-end
 
 %------------------------------------------------------------------------
 %------------------------------------------------------------------------
@@ -163,20 +125,20 @@ end
 %------------------------------------------------------------------------
 %------------------------------------------------------------------------
 
+%---------------------------------------------------------
+%% read in raw DW data
+%---------------------------------------------------------
 % read in and filter data
 DWr = readAndFilterTrigData(	'file', fullfile(datapath, DWrawfile), ...
 										'filterband', [HP.Fc LP.Fc], ...
 										'filterorder', HP.forder, ...
 										'showData', 'y');
-									
-%---------------------------------------------------------
-%% read in raw DW data
-%---------------------------------------------------------
-DWr = readBinData(fullfile(datapath, DWrawfile));
-
 % check vs. csv data
 fprintf('DWr data %s has %d sweeps\n', DWrawfile, DWr.nsweeps);
 fprintf('CSV file has %d stimuli\n', length(listdata));
+if DWr.nsweeps ~= length(listdata)
+	warning('Mismatch between # of triggered data and # in csv file')
+end
 
 %------------------------------------------------------------------------
 %------------------------------------------------------------------------
@@ -186,66 +148,95 @@ fprintf('CSV file has %d stimuli\n', length(listdata));
 
 %---------------------------------------------------------
 %% read in atten DW data
-% DWa = readBinData(fullfile(datapath, DWattfile));
 %---------------------------------------------------------
-
-
-
-
-%{
-
-
-%% find magnitudes
+% read in and filter data
+DWa = readAndFilterTrigData(	'file', fullfile(datapath, DWattfile), ...
+										'filterband', [HP.Fc LP.Fc], ...
+										'filterorder', HP.forder, ...
+										'showData', 'y');
 % check vs. csv data
+fprintf('DWa data %s has %d sweeps\n', DWattfile, DWr.nsweeps);
+fprintf('CSV file has %d stimuli\n', length(listdata));
+if DWa.nsweeps ~= length(listdata)
+	warning('Mismatch between # of triggered data and # in csv file')
+end
+
+
+
+%------------------------------------------------------------------------
+%------------------------------------------------------------------------
+%% computations
+%------------------------------------------------------------------------
+%------------------------------------------------------------------------
+
+
+
+
+%------------------------------------------------------------------------
+%------------------------------------------------------------------------
+%% DW raw data: find magnitudes
+%------------------------------------------------------------------------
+%------------------------------------------------------------------------
+
+[DWr.mag, DWr.phi, DWr.freq] = findMags(DWr, Freq, measure_window);
+
+
+%% check vs. csv data
 if(DWr.nsweeps == length(listdata))
+	% calculate range of bins (samples) for measurement (skip ramp on/off)
 	measure_bins = ms2bin(measure_window(1), DWr.cal.Fs)	...
 							: ms2bin(measure_window(2), DWr.cal.Fs);
+	% allocate mag, phi arrays
+	DWr.mag = zeros(DWr.nsweeps, 1);
+	DWr.phi = zeros(DWr.nsweeps, 1);
+	DWr.freq = Freq;
 	for n = 1:DWr.nsweeps
 		% compute pll magnitude and phase at this frequency
-		[mag(n), phi(n)] = fitsinvec(DWr.data{n}(measure_bins), ...
+		[DWr.mag(n), DWr.phi(n)] = fitsinvec(DWr.data{n}(measure_bins), ...
 										1, DWr.cal.Fs, Freq(n));
 	end
 
 	[~, fbase] = fileparts(DWrawfile);
-	csvwrite([fbase '_vals.csv'], [Freq, mag']);	
+	csvwrite([fbase '_vals.csv'], [DWr.freq, DWr.mag]);	
 else
 	% check vs. csv data
 	fprintf('DWr data %s has %d sweeps\n', DWrawfile, DWr.nsweeps);
 	fprintf('CSV file has %d stimuli\n', length(listdata));
 	% auto detect tones from raw unattenuated data
 	% tolerance (in Hz) for finding peak frequency in autodetect mode
-	FreqDetectWidth = 21;
-	calfreq = 0;
+	fprintf('automatically determining test frequency\n');
 	measure_bins = ms2bin(measure_window(1), DWr.cal.Fs)	...
 								: ms2bin(measure_window(2), DWr.cal.Fs);
+	% allocate mag, phi arrays
+	DWr.mag = zeros(DWr.nsweeps, 1);
+	DWr.phi = zeros(DWr.nsweeps, 1);
+	DWr.freq = zeros(DWr.nsweeps, 1);
 	for n = 1:DWr.nsweeps
 		% get spectrum of data
 		[tmpfreqs, tmpmags, fmax, magmax] = daqdbfft(DWr.data{n}', DWr.cal.Fs, ...
 																		length(DWr.data{n}));
 
-		freq(n) = fmax;
+		DWr.freq(n) = fmax;
 		% compute pll magnitude and phase at this frequency
-		[mag(n), phi(n)] = fitsinvec(DWr.data{n}(measure_bins), ...
-											1, DWr.cal.Fs, freq(n));
+		[DWr.mag(n), DWr.phi(n)] = fitsinvec(DWr.data{n}(measure_bins), ...
+											1, DWr.cal.Fs, DWr.freq(n));
 
 	end
 
-	[~, fbase] = fileparts(DWrawfile);
-	csvwrite([fbase '_vals.csv'], [freq', mag']);
-end
-%%
+% write to csv file
+[~, fbase] = fileparts(DWrawfile);
+csvwrite([fbase '_vals.csv'], [DWr.freq, DWr.mag]);
+%plot values
 figure
-
-dbvals.freqs = freqs;
-if length(dbvals.freqs) ~= length(dbvals.dbvals)
-	error('mismatch in # freqs and dbvals');
-end
-plot(freqs*0.001, dbvals.dbvals, '.-')
+plot(DWr.freq*0.001, DWr.mag, '.')
 xlabel('freqs (kHz)')
-ylabel('dB SPL')
+ylabel('Mag (V)')
 grid on
 grid minor
-%%
+
+
+%{
+% ??????
 
 fp = fopen('LSY-A_10V_9Jul2019.txt', 'wt');
 
