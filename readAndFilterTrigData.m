@@ -37,6 +37,30 @@ while index <= nargin
 			D.file = [fname fext];
 			% increment index by 2 places
 			index = index + 2;
+
+		case 'filterband'
+			tmpf = varargin{index+1};
+			if ~isnumeric(tmpf)
+				error('%s: filter freqs must be a number', mfilename);
+			elseif any(tmpf) < 0
+				error('%s: cutoff freqs must greater than 0', mfilename);
+			else
+				D.HP.Fc  = tmpf(1);
+				D.LP.Fc  = tmpf(2);
+			end
+			index = index + 2;
+
+		case 'filterorder'
+			tmpf = varargin{index+1};
+			if ~isnumeric(tmpf)
+				error('%s: filter order must be a number', mfilename);
+			elseif tmpf < 0
+				error('%s: filter order must greater than 0', mfilename);
+			else
+				D.HP.order  = tmpf;
+				D.LP.order  = tmpf;
+			end
+			index = index + 2;
 			
 		case 'hpfc'
 			tmpf = varargin{index+1};
@@ -154,10 +178,11 @@ fnyq = D.cal.Fs/2;
 if showData
 	figure
 	dt = 1/D.cal.Fs;
+	set(gcf, 'Name', D.file);
 end
 
-for n = 1:D.nsweeps
 
+for n = 1:D.nsweeps
 	% filter data
 	% apply short ramp and highpass filter
 	tmp = filtfilt(D.HP.fb, D.HP.fa, ...

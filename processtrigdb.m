@@ -103,7 +103,11 @@ Level = listdata(:, 5);
 %---------------------------------------------------------
 %% read in acquired data for MIC (microphone)
 %---------------------------------------------------------
-MIC = readBinData(fullfile(datapath, MICfile));
+% read in and filter data
+MIC = readAndFilterTrigData(	'file', fullfile(datapath, MICfile), ...
+										'filterband', [HP.Fc LP.Fc], ...
+										'filterorder', HP.forder, ...
+										'showData', 'y');
 
 %---------------------------------------------------------
 %% process MIC data
@@ -160,10 +164,9 @@ end
 %------------------------------------------------------------------------
 
 % read in and filter data
-
 DWr = readAndFilterTrigData(	'file', fullfile(datapath, DWrawfile), ...
-										'HPfc', HP.Fc, 'HPorder', HP.forder, ...
-										'LPfc', LP.Fc, 'LPorder', LP.forder, ...
+										'filterband', [HP.Fc LP.Fc], ...
+										'filterorder', HP.forder, ...
 										'showData', 'y');
 									
 %---------------------------------------------------------
@@ -171,47 +174,9 @@ DWr = readAndFilterTrigData(	'file', fullfile(datapath, DWrawfile), ...
 %---------------------------------------------------------
 DWr = readBinData(fullfile(datapath, DWrawfile));
 
-%% process raw, unattenuated data
-
-% get # of sweeps
-DWr.nsweeps = length(DWr.data);
 % check vs. csv data
 fprintf('DWr data %s has %d sweeps\n', DWrawfile, DWr.nsweeps);
 fprintf('CSV file has %d stimuli\n', length(listdata));
-
-% first, filter the data
-fprintf('Filtering DWr data\n');
-% Nyquist frequency
-fnyq = DWr.cal.Fs/2;
-% build a highpass filter for processing the data
-[HP.fcoeffb, HP.fcoeffa] = butter(HP.forder, HP.Fc/fnyq, 'high');
-% build a lowpass filter for processing the data
-[LP.fcoeffb, LP.fcoeffa] = butter(LP.forder, LP.Fc/fnyq, 'low');
-
-% loop through sweeps, apply ramp and filter
-figure(1)
-dt = 1/DWr.cal.Fs;
-for n = 1:DWr.nsweeps
-	% plot raw data
-	subplot(2, 1, 1)
-	tvec = 1000 * dt * (0:(length(DWr.data{n}) - 1));
-	plot(tvec, DWr.data{n});
-	ylabel('Raw (V)');
-	title(sprintf('DWr Sweep %d', n));
-	% filter data
-	% apply short ramp and highpass filter
-	tmp = filtfilt(HP.fcoeffb, HP.fcoeffa, ...
-					sin2array(DWr.data{n}', ramp_ms, DWr.cal.Fs));
-	% apply lowpass filter
-	tmp = filtfilt(LP.fcoeffb, LP.fcoeffa, tmp);
-	% plot filtered data
-	subplot(212)
-	plot(tvec, tmp);
-	xlabel('Time (ms)');
-	ylabel('Filtered (V)');
-	drawnow
-	DWr.data{n} = tmp;
-end
 
 %------------------------------------------------------------------------
 %------------------------------------------------------------------------
