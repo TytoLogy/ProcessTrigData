@@ -1,16 +1,18 @@
 %------------------------------------------------------------------------
 %------------------------------------------------------------------------
-% processtrigdb
-%------------------------------------------------------------------------
+% processIKrig
 %------------------------------------------------------------------------
 %------------------------------------------------------------------------
 % script to process triggered capture data from NICal for Inga's data
 %------------------------------------------------------------------------
 %
 %------------------------------------------------------------------------
-% Files:
+% Input Files (specific data files will change...):
 %------------------------------------------------------------------------
 % 
+% List of freqs, atten, dblevels etc. from datawave:
+%	calibrate_full_list_atten_30Higher.csv 
+%
 % Direct output from datawave (output from PA5 attenuator):
 % 	DW_Atten_FullList_20190930_1.bin         
 % 	DW_Atten_FullList_20190930_1.mat         
@@ -37,8 +39,6 @@
 %------------------------------------------------------------------------
 %------------------------------------------------------------------------
 
-
-
 %------------------------------------------------------------------------
 %------------------------------------------------------------------------
 %% Settings
@@ -52,7 +52,7 @@ infofile = 'calibrate_full_list_atten_30Higher.csv';
 %---------------------------------------------------------
 % path to data files triggered data file (.bin)
 %---------------------------------------------------------
-datapath = '/Users/sshanbhag/Work/Data/Audio/Calibration/Inga/03Oct2019';
+datapath = '~/Work/Data/Audio/Calibration/Inga/03Oct2019';
 %---------------------------------------------------------
 % data files
 %---------------------------------------------------------
@@ -207,9 +207,13 @@ MIC.db = dbspl(MIC.cal.VtoPa * (sqrt(2)/2) * MIC.mag);
 
 % write to csv file
 [~, fbase] = fileparts(MIC.file);
-csvwrite([fbase '_vals.csv'], [MIC.freq, MIC.mag, MIC.db]);
+% csvwrite([fbase '_vals.csv'], [MIC.freq, MIC.mag, MIC.db]);
+% use array2table and writetable to write csv file with column labels
+tmp = array2table( [MIC.freq, MIC.mag, MIC.db], 'VariableNames', ...
+				{'freq', 'peak_mag', 'dbspl'});
+writetable(tmp, [fbase '_vals.csv'], 'WriteVariableNames', true);
 
-%% Plot through levels
+% Plot through levels
 figure
 lstr = cell(nlev, 1);
 for l = 1:nlev
@@ -232,16 +236,23 @@ ylabel('dB SPL');
 grid on
 grid minor
 set(gcf, 'Name', MIC.file);
-
+title(MIC.file, 'Interpreter', 'none');
+% save as .fig and .pdf
+saveas(gcf, [fbase '.fig'])
+print(gcf, [fbase '.pdf'], '-dpdf')
 %------------------------------------------------------------------------
 %------------------------------------------------------------------------
 %% DW raw data: find magnitudes
 %------------------------------------------------------------------------
 %------------------------------------------------------------------------
 [DWr.mag, DWr.phi, DWr.freq] = findMags(DWr, Freq, measure_window);
-% write to csv file
+%write to csv file
 [~, fbase] = fileparts(DWr.file);
-csvwrite([fbase '_vals.csv'], [DWr.freq, DWr.mag]);
+% csvwrite([fbase '_vals.csv'], [DWr.freq, DWr.mag]);
+% use array2table and writetable to write csv file with column labels
+tmp = array2table( [DWr.freq, DWr.mag], 'VariableNames', ...
+				{'freq', 'peak_mag'});
+writetable(tmp, [fbase '_vals.csv'], 'WriteVariableNames', true);
 
 % determine unique frequency values
 freq = unique(DWr.freq);
@@ -262,11 +273,7 @@ fprintf('Attenuations (dB) tested:\n');
 fprintf('\t%d\n', att);
 fprintf('\n');
 
-%% write to csv file
-[~, fbase] = fileparts(DWr.file);
-csvwrite([fbase '_vals.csv'], [DWr.freq, DWr.mag]);
-
-%% Plot through levels
+% Plot through levels
 figure
 lstr = cell(nlev, 1);
 for l = 1:nlev
@@ -289,8 +296,10 @@ ylabel('Peak Volts');
 grid on
 grid minor
 set(gcf, 'Name', DWr.file);
-
-
+title(DWr.file, 'Interpreter', 'none');
+% save as .fig and .pdf
+saveas(gcf, [fbase '.fig'])
+print(gcf, [fbase '.pdf'], '-dpdf')
 
 %------------------------------------------------------------------------
 %------------------------------------------------------------------------
@@ -304,7 +313,11 @@ DWa.db = db( (sqrt(2)/2) * DWa.mag);
 
 % write to csv file
 [~, fbase] = fileparts(DWa.file);
-csvwrite([fbase '_vals.csv'], [DWa.freq, DWa.mag DWa.db]);
+% csvwrite([fbase '_vals.csv'], [DWa.freq, DWa.mag DWa.db]);
+% use array2table and writetable to write csv file with column labels
+tmp = array2table([DWa.freq, DWa.mag DWa.db], 'VariableNames', ...
+				{'freq', 'peak_mag', 'dBV'});
+writetable(tmp, [fbase '_vals.csv'], 'WriteVariableNames', true);
 
 % determine unique frequency values
 freq = unique(DWa.freq);
@@ -325,11 +338,7 @@ fprintf('Attenuations (dB) tested:\n');
 fprintf('\t%d\n', att);
 fprintf('\n');
 
-%% write to csv file
-[~, fbase] = fileparts(DWa.file);
-csvwrite([fbase '_vals.csv'], [DWa.freq, DWa.mag]);
-
-%% Plot through levels
+% Plot through levels
 figure
 lstr = cell(nlev, 1);
 for l = 1:nlev
@@ -344,7 +353,7 @@ for l = 1:nlev
 		plot(0.001*Freq(startx:endx), DWa.mag(startx:endx), '-.');
 		hold off
 	end
-	lstr{l} = sprintf('%d dB SPL', lev(l));
+	lstr{l} = sprintf('%d db SPL', lev(l));
 end
 legend(lstr)
 xlabel('Frequency (kHz)')
@@ -361,20 +370,28 @@ for l = 1:nlev
 	endx = (l*nfreq);
 	indx = startx:endx;
 	if l == 1
-		plot(0.001*Freq(startx:endx), DWa.mag(startx:endx), '-.');
+		plot(0.001*Freq(startx:endx), DWa.db(startx:endx), '-.');
 	else
 		hold on
-		plot(0.001*Freq(startx:endx), DWa.mag(startx:endx), '-.');
+		plot(0.001*Freq(startx:endx), DWa.db(startx:endx), '-.');
 		hold off
 	end
-	lstr{l} = sprintf('%d Vrms', lev(l));
+	lstr{l} = sprintf('%d db SPL', lev(l));
 end
 legend(lstr)
 xlabel('Frequency (kHz)')
-ylabel('Volts RMS');
+ylabel('db (Volts RMS)');
 grid on
 grid minor
 set(gcf, 'Name', DWa.file);
+title(DWa.file, 'Interpreter', 'none');
+% save as .fig and .pdf
+saveas(gcf, [fbase '.fig'])
+print(gcf, [fbase '.pdf'], '-dpdf')
+
+
+
+
 
 %{
 % ??????
